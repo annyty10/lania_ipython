@@ -1,0 +1,78 @@
+!adb forward tcp:9999 tcp:47048
+import android
+import json
+import time
+import random
+
+droid = android.Android()
+lastcheck = int(round(time.time() * 1000))
+print lastcheck
+vecino1 = droid.dialogGetInput('Detector', 'Introduce cual es el telefono del que esperas avisos, si eres el primer telefono en la linea de vigilancia deja la casilla vacia').result
+vecino2 = droid.dialogGetInput('Detector', 'Introduce cual es el telefono al que vas a notificar').result
+if not vecino1:
+    modo = 'V' #Vigilante desde el principio detecta movimiento
+else:
+    modo = 'D' #Esta a la espera del sms para iniciar la detección
+print modo
+mensaje = "Move detected wake up..."
+
+def sendSMS():
+    droid.smsSend(vecino2,mensaje)
+
+def detectMove():
+    ##Codigo de detección de movimiento
+    ##Debe devolver un booleano True o False
+    mov = random.randint(0, 999)
+    if mov > 700:
+        print 'move',mov
+        return True
+    return False
+
+def scanSMSs(lastcheck):
+    #Detecta si recibe alguna notificacion
+    msgs = droid.smsGetMessages(False, 'inbox')
+    #print msgs[1]
+    m = str(msgs[1])
+    m = m.replace('\\','-').replace('"','<').replace("u'",'"').replace("'",'"')
+    #print m
+    d = json.loads(m)
+    #print d
+    count = 1
+    startwatch = False
+    for msg in d:
+        #m = str(msg)
+        #m = m.replace('"','<').replace("u'",'"').replace("'",'"')
+        #d = json.loads(m)
+        #print d
+        if long(msg['date']) > lastcheck and msg['address'] == vecino1 and mensaje in str(msg['body']):
+            print "Start watch..."
+            startwatch = True
+            lastcheck = int(round(time.time() * 1000))
+            droid.smsDeleteMessage(msg['_id'])
+            break;
+        count += 1
+    print count
+    if not startwatch:
+        print "Go to sleep"
+    return startwatch
+
+counterdetect = 0
+while(True):
+    if modo == 'V':
+        if detectMove():
+            sendSMS()
+            #break
+            time.sleep(10)
+            counterdetect = 0
+        else:
+            counterdetect += 1
+    else:
+        if scanSMSs(lastcheck):
+            modo = 'V'
+            counterdetect = 0
+            
+    if counterdetect > 10 and vecino1:
+        modo = 'D'
+    print modo
+    time.sleep(1)
+print "Program finish"
